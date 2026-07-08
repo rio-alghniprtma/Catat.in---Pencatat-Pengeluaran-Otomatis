@@ -1,0 +1,6 @@
+{
+  "name": "Catat.in - Pencatat Pengeluaran Otomatis",
+  "description": "Aplikasi asisten pencatat pengeluaran harian otomatis bertenaga AI dengan scan struk belanja dan asisten keuangan personal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
