@@ -1,6 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, Budget, CATEGORIES } from '../types';
 import { TrendingUp, TrendingDown, Wallet, AlertCircle, Sparkles, ChevronRight, Settings, Plus } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ReferenceLine,
+  BarChart,
+  Bar,
+  Cell,
+} from 'recharts';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -17,6 +31,7 @@ export default function Dashboard({
 }: DashboardProps) {
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
   const [selectedChartTab, setSelectedChartTab] = useState<'expense' | 'income'>('expense');
+  const [selectedAnalysisTab, setSelectedAnalysisTab] = useState<'cumulative' | 'categories'>('cumulative');
 
   // Currency Formatter
   const formatIDR = (num: number) => {
@@ -218,6 +233,74 @@ export default function Dashboard({
     .filter(t => t.type === 'expense' && budgets.some(b => b.category === t.category))
     .reduce((sum, t) => sum + t.amount, 0);
   const totalBudgetPercentage = totalLimit > 0 ? (totalSpentInLimitCategories / totalLimit) * 100 : 0;
+
+  // Y-Axis formatter for clean currency representation
+  const formatYAxis = (value: number) => {
+    if (value >= 1000000) return `Rp ${(value / 1000000).toFixed(1)}jt`;
+    if (value >= 1000) return `Rp ${(value / 1000).toFixed(0)}rb`;
+    return `Rp ${value}`;
+  };
+
+  // Custom tooltips to match aesthetic pairing
+  const CustomChartTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white border border-border-warm p-3.5 rounded-2xl shadow-lg text-xs space-y-1.5 min-w-[160px]">
+          <p className="font-extrabold text-earth border-b border-cream-dark pb-1">{label}</p>
+          {payload.map((p: any, idx: number) => (
+            <div key={idx} className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color || p.fill }}></span>
+                <span className="text-earth-light font-medium">{p.name}:</span>
+              </div>
+              <span className="font-bold text-earth font-mono">{formatIDR(p.value)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // 1. Cumulative spending data over the days of the month vs total monthly budget
+  const cumulativeSpendingData = useMemo(() => {
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    let cumulativeSpent = 0;
+    const dailyMap: Record<number, number> = {};
+    
+    // Initialize days
+    for (let i = 1; i <= daysInMonth; i++) {
+      dailyMap[i] = 0;
+    }
+
+    // Populate daily expenses
+    monthlyTransactions.forEach(t => {
+      if (t.type === 'expense') {
+        const day = parseInt(t.date.split('-')[2], 10);
+        if (day >= 1 && day <= daysInMonth) {
+          dailyMap[day] += t.amount;
+        }
+      }
+    });
+
+    return Object.entries(dailyMap).map(([dayStr, amount]) => {
+      cumulativeSpent += amount;
+      return {
+        day: `Tgl ${dayStr}`,
+        'Akumulasi Pengeluaran': cumulativeSpent,
+        'Batas Anggaran Bulanan': totalLimit,
+      };
+    });
+  }, [monthlyTransactions, totalLimit]);
+
+  // 2. Category-wise Budget vs Actual Spending
+  const categoryChartData = useMemo(() => {
+    return budgetStatuses.map(b => ({
+      name: b.category,
+      'Limit Anggaran': b.limit,
+      'Total Pengeluaran': b.currentSpending,
+    }));
+  }, [budgetStatuses]);
 
   return (
     <div className="space-y-6">
@@ -561,6 +644,142 @@ export default function Dashboard({
             Sorot bagian grafik atau daftar untuk rincian persentase transaksi.
           </div>
         </div>
+      </div>
+
+      {/* Section: Analisis Kemajuan Anggaran (Recharts) */}
+      <div className="bg-white p-6 rounded-[32px] border border-border-warm shadow-sm" id="recharts_budget_analytics">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-cream-dark pb-4">
+          <div className="space-y-1">
+            <h3 className="text-sm sm:text-base font-extrabold text-earth flex items-center gap-2">
+              <Sparkles className="w-4.5 h-4.5 text-sage shrink-0" />
+              <span>Analisis Visual Anggaran (Recharts)</span>
+            </h3>
+            <p className="text-xs text-earth-light">Perbandingan interaktif kemajuan pengeluaran aktual terhadap batas anggaran bulanan</p>
+          </div>
+
+          {/* Toggle buttons */}
+          <div className="flex bg-cream-dark p-1 rounded-xl self-start sm:self-auto">
+            <button
+              onClick={() => setSelectedAnalysisTab('cumulative')}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${selectedAnalysisTab === 'cumulative' ? 'bg-white text-sage-dark shadow-sm' : 'text-earth-light hover:text-earth'}`}
+            >
+              Progres Akumulasi
+            </button>
+            <button
+              onClick={() => setSelectedAnalysisTab('categories')}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${selectedAnalysisTab === 'categories' ? 'bg-white text-sage-dark shadow-sm' : 'text-earth-light hover:text-earth'}`}
+            >
+              Komparasi Kategori
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 h-[280px] w-full relative">
+          {totalLimit === 0 ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 text-earth-light">
+              <AlertCircle className="w-10 h-10 stroke-1 text-earth-light/60 mb-2" />
+              <span className="text-xs font-bold block">Batas Anggaran Belum Diatur</span>
+              <p className="text-[11px] text-earth-light/80 max-w-xs mt-1">
+                Atur limit budget untuk mengaktifkan grafik kemajuan visual interaktif.
+              </p>
+              <button
+                onClick={onManageBudgetsClick}
+                className="mt-3 text-xs font-bold bg-sage text-white px-4 py-2 rounded-xl hover:bg-sage-dark transition-all"
+              >
+                Atur Limit Sekarang
+              </button>
+            </div>
+          ) : selectedAnalysisTab === 'cumulative' ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={cumulativeSpendingData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorCumulative" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#7C8D75" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#7C8D75" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1E9E0" vertical={false} />
+                <XAxis 
+                  dataKey="day" 
+                  tick={{ fill: '#8C7D70', fontSize: 9, fontFamily: 'monospace' }} 
+                  axisLine={{ stroke: '#E8E4DF' }}
+                  tickLine={{ stroke: '#E8E4DF' }}
+                />
+                <YAxis 
+                  tickFormatter={formatYAxis} 
+                  tick={{ fill: '#8C7D70', fontSize: 9, fontFamily: 'monospace' }} 
+                  axisLine={{ stroke: '#E8E4DF' }}
+                  tickLine={{ stroke: '#E8E4DF' }}
+                />
+                <RechartsTooltip content={<CustomChartTooltip />} />
+                <RechartsLegend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 'bold', color: '#4A453F' }} />
+                <ReferenceLine 
+                  y={totalLimit} 
+                  stroke="#F43F5E" 
+                  strokeDasharray="4 4" 
+                  strokeWidth={2}
+                  label={{ 
+                    value: `Batas Budget: ${formatIDR(totalLimit)}`, 
+                    position: 'top', 
+                    fill: '#F43F5E', 
+                    fontSize: 9, 
+                    fontWeight: 'bold' 
+                  }} 
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="Akumulasi Pengeluaran" 
+                  stroke="#7C8D75" 
+                  strokeWidth={3} 
+                  fillOpacity={1} 
+                  fill="url(#colorCumulative)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={categoryChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1E9E0" vertical={false} />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fill: '#8C7D70', fontSize: 9 }} 
+                  axisLine={{ stroke: '#E8E4DF' }}
+                  tickLine={{ stroke: '#E8E4DF' }}
+                />
+                <YAxis 
+                  tickFormatter={formatYAxis} 
+                  tick={{ fill: '#8C7D70', fontSize: 9, fontFamily: 'monospace' }} 
+                  axisLine={{ stroke: '#E8E4DF' }}
+                  tickLine={{ stroke: '#E8E4DF' }}
+                />
+                <RechartsTooltip content={<CustomChartTooltip />} />
+                <RechartsLegend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 'bold', color: '#4A453F' }} />
+                <Bar dataKey="Limit Anggaran" fill="#E8EDF2" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                <Bar dataKey="Total Pengeluaran" fill="#7C8D75" radius={[4, 4, 0, 0]} maxBarSize={32}>
+                  {categoryChartData.map((entry, index) => {
+                    const isOver = entry['Total Pengeluaran'] > entry['Limit Anggaran'];
+                    return <Cell key={`cell-${index}`} fill={isOver ? '#F43F5E' : '#7C8D75'} />;
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {totalLimit > 0 && (
+          <div className="mt-4 pt-4 border-t border-cream-dark flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-earth">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-sage shrink-0"></div>
+              <span>Total Anggaran: <strong>{formatIDR(totalLimit)}</strong></span>
+              <span className="text-earth-light">|</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></div>
+              <span>Terpakai (Kategori Terpantau): <strong>{formatIDR(totalSpentInLimitCategories)}</strong></span>
+            </div>
+            <div className="font-extrabold text-sage-dark bg-sage-light px-2.5 py-1 rounded-lg">
+              {totalBudgetPercentage.toFixed(0)}% Anggaran Terpakai
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Grid 3: Budget Targets & Goals */}
