@@ -14,8 +14,38 @@ import {
   RefreshCw,
   TrendingDown,
   TrendingUp,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Utensils,
+  Car,
+  ShoppingBag,
+  Film,
+  ReceiptText,
+  HeartPulse,
+  HelpCircle
 } from 'lucide-react';
+
+// Helper component to render category-specific icons dynamically
+const CategoryIcon = ({ category }: { category: string }) => {
+  const cat = CATEGORIES[category] || CATEGORIES['Lainnya'];
+  switch (cat.icon) {
+    case 'Utensils':
+      return <Utensils className="w-4.5 h-4.5 animate-fade-in" />;
+    case 'Car':
+      return <Car className="w-4.5 h-4.5 animate-fade-in" />;
+    case 'ShoppingBag':
+      return <ShoppingBag className="w-4.5 h-4.5 animate-fade-in" />;
+    case 'Film':
+      return <Film className="w-4.5 h-4.5 animate-fade-in" />;
+    case 'ReceiptText':
+      return <ReceiptText className="w-4.5 h-4.5 animate-fade-in" />;
+    case 'HeartPulse':
+      return <HeartPulse className="w-4.5 h-4.5 animate-fade-in" />;
+    case 'TrendingUp':
+      return <TrendingUp className="w-4.5 h-4.5 animate-fade-in" />;
+    default:
+      return <HelpCircle className="w-4.5 h-4.5 animate-fade-in" />;
+  }
+};
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -368,12 +398,7 @@ export default function TransactionList({
                     className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border border-white shadow-sm"
                     style={{ backgroundColor: cat.bgLight, color: cat.color }}
                   >
-                    {/* Simplified icon representation since we don't dynamically import */}
-                    {t.type === 'expense' ? (
-                      <TrendingDown className="w-4.5 h-4.5" />
-                    ) : (
-                      <TrendingUp className="w-4.5 h-4.5" />
-                    )}
+                    <CategoryIcon category={t.category} />
                   </div>
                   
                   <div className="space-y-1 min-w-0">
